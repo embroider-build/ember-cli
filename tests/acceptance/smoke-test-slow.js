@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const walkSync = require('walk-sync');
 const EOL = require('os').EOL;
 
-const experiments = require('../../lib/experiments');
+const { isExperimentEnabled } = require('../../lib/experiments');
 const runCommand = require('../helpers/run-command');
 const acceptance = require('../helpers/acceptance');
 const copyFixtureFiles = require('../helpers/copy-fixture-files');
@@ -48,7 +48,7 @@ describe('Acceptance: smoke-test', function() {
     return runCommand(path.join('.', 'node_modules', 'ember-cli', 'bin', 'ember'), 'test');
   });
 
-  if (!experiments.MODULE_UNIFICATION) {
+  if (!isExperimentEnabled('MODULE_UNIFICATION')) {
     it('ember new foo, make sure addon template overwrites', co.wrap(function *() {
       yield ember(['generate', 'template', 'foo']);
       yield ember(['generate', 'in-repo-addon', 'my-addon']);
@@ -77,8 +77,14 @@ describe('Acceptance: smoke-test', function() {
 
   it('ember test still runs when a JavaScript testem config exists', co.wrap(function *() {
     yield copyFixtureFiles('smoke-tests/js-testem-config');
-    yield ember(['test']);
-    expect(process.env._TESTEM_CONFIG_JS_RAN).to.be.ok;
+
+    let result = yield runCommand(path.join('.', 'node_modules', 'ember-cli', 'bin', 'ember'), 'test');
+
+    let exitCode = result.code;
+    let output = result.output.join(EOL);
+
+    expect(exitCode).to.eql(0);
+    expect(output).to.include('***CUSTOM_TESTEM_JS**');
   }));
 
   // there is a bug in here when running the entire suite on Travis
@@ -127,7 +133,7 @@ describe('Acceptance: smoke-test', function() {
     expect(exitCode).to.equal(0, 'exit code should be 0 for passing tests');
     expect(output).to.match(/JSHint/, 'JSHint should be run on production assets');
     expect(output).to.match(/fail\s+0/, 'no failures');
-    expect(output).to.match(/pass\s+\d+/, 'man=y passing');
+    expect(output).to.match(/pass\s+\d+/, 'many passing');
   }));
 
   it('ember test --path with previous build', co.wrap(function *() {
@@ -155,7 +161,7 @@ describe('Acceptance: smoke-test', function() {
     output = output.join(EOL);
 
     expect(output).to.match(/fail\s+0/, 'no failures');
-    expect(output).to.match(/pass\s+9/, '9 passing');
+    expect(output).to.match(/pass\s+\d+/, 'many passing');
   }));
 
   it('ember test wasm', co.wrap(function *() {
@@ -183,7 +189,7 @@ describe('Acceptance: smoke-test', function() {
     output = output.join(EOL);
 
     expect(output).to.match(/fail\s+0/, 'no failures');
-    expect(output).to.match(/pass\s+7/, '7 passing');
+    expect(output).to.match(/pass\s+\d+/, 'many passing');
   }));
 
   it('ember new foo, build development, and verify generated files', co.wrap(function *() {
@@ -195,10 +201,9 @@ describe('Acceptance: smoke-test', function() {
     expect(paths).to.have.length.below(24, `expected fewer than 24 files in dist, found ${paths.length}`);
   }));
 
-  if (!experiments.MODULE_UNIFICATION) {
+  if (!isExperimentEnabled('MODULE_UNIFICATION')) {
     it('ember build exits with non-zero code when build fails', co.wrap(function *() {
       let appJsPath = path.join(appRoot, 'app', 'app.js');
-      let ouputContainsBuildFailed = false;
 
       let result = yield runCommand(path.join('.', 'node_modules', 'ember-cli', 'bin', 'ember'), 'build');
       expect(result.code).to.equal(0, `expected exit code to be zero, but got ${result.code}`);
@@ -206,17 +211,8 @@ describe('Acceptance: smoke-test', function() {
       // add something broken to the project to make build fail
       fs.appendFileSync(appJsPath, '{(syntaxError>$@}{');
 
-      result = yield expect(runCommand(path.join('.', 'node_modules', 'ember-cli', 'bin', 'ember'), 'build', {
-        onOutput(string) {
-          // discard output as there will be a lot of errors and a long stacktrace
-          // just mark that the output contains expected text
-          if (!ouputContainsBuildFailed && string.match(/Build failed/)) {
-            ouputContainsBuildFailed = true;
-          }
-        },
-      })).to.be.rejected;
+      result = yield expect(runCommand(path.join('.', 'node_modules', 'ember-cli', 'bin', 'ember'), 'build')).to.be.rejected;
 
-      expect(ouputContainsBuildFailed, 'command output must contain "Build failed" text').to.be.ok;
       expect(result.code).to.not.equal(0, `expected exit code to be non-zero, but got ${result.code}`);
     }));
   }
@@ -249,7 +245,7 @@ describe('Acceptance: smoke-test', function() {
     });
   }));
 
-  if (!experiments.MODULE_UNIFICATION) {
+  if (!isExperimentEnabled('MODULE_UNIFICATION')) {
     it('ember new foo, build --watch development, and verify rebuilt after change', co.wrap(function *() {
       let touched = false;
       let appJsPath = path.join(appRoot, 'app', 'app.js');
@@ -399,7 +395,7 @@ describe('Acceptance: smoke-test', function() {
     });
   }));
 
-  if (!experiments.MODULE_UNIFICATION) {
+  if (!isExperimentEnabled('MODULE_UNIFICATION')) {
     it('ember can override and reuse the built-in blueprints', co.wrap(function *() {
       yield copyFixtureFiles('addon/with-blueprint-override');
 

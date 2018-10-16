@@ -13,7 +13,7 @@ const buildOutput = broccoliTestHelper.buildOutput;
 const createTempDir = broccoliTestHelper.createTempDir;
 
 const MockCLI = require('../../helpers/mock-cli');
-const experiments = require('../../../lib/experiments');
+const { isExperimentEnabled } = require('../../../lib/experiments');
 const mergeTrees = require('../../../lib/broccoli/merge-trees');
 
 let EmberApp = require('../../../lib/broccoli/ember-app');
@@ -55,7 +55,7 @@ describe('EmberApp', function() {
     project = setupProject(projectPath);
   });
 
-  if (experiments.PACKAGER) {
+  if (isExperimentEnabled('PACKAGER')) {
     describe('packager hook', function() {
       let js, input, output;
 
@@ -83,6 +83,32 @@ describe('EmberApp', function() {
         yield js.dispose();
       }));
 
+      it('sets `_isPackageHookSupplied` to `false` if `package` hook is not a function', function() {
+        let app = new EmberApp({
+          project,
+          package: false,
+        });
+
+        expect(app._isPackageHookSupplied).to.equal(false);
+      });
+
+      it('sets `_isPackageHookSupplied` to `false` if `package` hook is not supplied', function() {
+        let app = new EmberApp({
+          project,
+        });
+
+        expect(app._isPackageHookSupplied).to.equal(false);
+      });
+
+      it('sets `_isPackageHookSupplied` to `true` if `package` hook is supplied', function() {
+        let app = new EmberApp({
+          project,
+          package: () => input.path(),
+        });
+
+        expect(app._isPackageHookSupplied).to.equal(true);
+      });
+
       it('overrides the output of the build', co.wrap(function *() {
         input.write({
           fake: {
@@ -94,9 +120,9 @@ describe('EmberApp', function() {
 
         let app = new EmberApp({
           project,
+          package: () => input.path(),
         });
         mockTemplateRegistry(app);
-        app.package = () => input.path();
 
         output = yield buildOutput(app.toTree());
 
@@ -112,6 +138,10 @@ describe('EmberApp', function() {
       }));
 
       it('receives a full tree as an argument', co.wrap(function *() {
+        let appStyles = yield createTempDir();
+        appStyles.write({
+          'app.css': '// css styles',
+        });
         input.write({
           fake: {
             dist: {
@@ -122,16 +152,14 @@ describe('EmberApp', function() {
 
         let app = new EmberApp({
           project,
+          package: tree => mergeTrees([tree, input.path()]),
+          trees: {
+            styles: appStyles.path(),
+          },
         });
         mockTemplateRegistry(app);
 
         app.getAppJavascript = () => js.path();
-        app.package = function(tree) {
-          return mergeTrees([
-            tree,
-            input.path(),
-          ]);
-        };
 
         output = yield buildOutput(app.toTree());
 
@@ -145,8 +173,12 @@ describe('EmberApp', function() {
             },
             javascript: '// javascript.js',
           },
+          app: {
+            styles: {
+              'app.css': '// css styles',
+            },
+          },
           'test-project': {
-            styles: {},
             templates: {},
           },
           tests: {
@@ -164,15 +196,14 @@ describe('EmberApp', function() {
       it('prints a warning if `package` is not a function and falls back to default packaging', co.wrap(function *() {
         let app = new EmberApp({
           project,
+          package: {},
         });
-
-        app.package = { };
 
         app.project.ui.writeWarnLine = td.function();
 
         app.getAppJavascript = td.function();
         app.getAddonTemplates = td.function();
-        app.getAddonStyles = td.function();
+        app.getStyles = td.function();
         app.getTests = td.function();
         app.getExternalTree = td.function();
         app.getSrc = td.function();
@@ -189,7 +220,7 @@ describe('EmberApp', function() {
         output = yield buildOutput(app.toTree());
 
         td.verify(app.getAppJavascript(false));
-        td.verify(app.getAddonStyles());
+        td.verify(app.getStyles());
         td.verify(app.getTests());
         td.verify(app.getExternalTree());
         td.verify(app.getSrc());
@@ -199,10 +230,10 @@ describe('EmberApp', function() {
       it('receives transpiled ES current app tree', co.wrap(function *() {
         let app = new EmberApp({
           project,
+          package: tree => tree,
         });
         mockTemplateRegistry(app);
 
-        app.package = tree => tree;
         input.write({
           fake: {
             dist: {
@@ -231,11 +262,41 @@ describe('EmberApp', function() {
     });
   }
 
-  describe('getAddonStyles()', function() {
+  describe('getStyles()', function() {
+    it('can handle empty styles folders', co.wrap(function *() {
+      let appStyles = yield createTempDir();
+      appStyles.write({
+        'app.css': '// css styles',
+      });
+
+      let app = new EmberApp({
+        project,
+        trees: {
+          styles: appStyles.path(),
+        },
+      });
+
+      app.addonTreesFor = () => [];
+
+      let output = yield buildOutput(app.getStyles());
+      let outputFiles = output.read();
+
+      expect(outputFiles).to.deep.equal({
+        app: {
+          styles: {
+            'app.css': '// css styles',
+          },
+        },
+      });
+
+      yield output.dispose();
+    }));
+
     it('returns add-ons styles files', co.wrap(function *() {
       let addonFooStyles = yield createTempDir();
       let addonBarStyles = yield createTempDir();
 
+      // `ember-basic-dropdown`
       addonFooStyles.write({
         app: {
           styles: {
@@ -243,11 +304,10 @@ describe('EmberApp', function() {
           },
         },
       });
+      // `ember-bootstrap`
       addonBarStyles.write({
-        app: {
-          styles: {
-            'bar.css': 'bar',
-          },
+        baztrap: {
+          'baztrap.css': '// baztrap.css',
         },
       });
 
@@ -261,13 +321,17 @@ describe('EmberApp', function() {
         ];
       };
 
-      let output = yield buildOutput(app.getAddonStyles());
+      let output = yield buildOutput(app.getStyles());
       let outputFiles = output.read();
 
-      expect(outputFiles['test-project']).to.deep.equal({
-        styles: {
-          'foo.css': 'foo',
-          'bar.css': 'bar',
+      expect(outputFiles).to.deep.equal({
+        app: {
+          styles: {
+            'foo.css': 'foo',
+          },
+        },
+        baztrap: {
+          'baztrap.css': '// baztrap.css',
         },
       });
 
@@ -282,12 +346,10 @@ describe('EmberApp', function() {
       });
       app.addonTreesFor = () => [];
 
-      let output = yield buildOutput(app.getAddonStyles());
+      let output = yield buildOutput(app.getStyles());
       let outputFiles = output.read();
 
-      expect(outputFiles['test-project']).to.deep.equal({
-        styles: { },
-      });
+      expect(outputFiles).to.deep.equal({});
 
       yield output.dispose();
     }));
@@ -883,6 +945,27 @@ describe('EmberApp', function() {
       });
     });
 
+    describe('toArray', function() {
+      it('excludes `tests` tree from resulting array if the tree is not present', function() {
+        app = new EmberApp({
+          project,
+          trees: {
+            tests: null,
+          },
+        });
+
+        app._defaultPackager.packageJavascript = td.function();
+        app._defaultPackager.packageStyles = td.function();
+        app._legacyAddonCompile = td.function();
+
+        td.when(app._legacyAddonCompile(), { ignoreExtraArgs: true }).thenReturn('batman');
+        td.when(app._defaultPackager.packageJavascript(), { ignoreExtraArgs: true }).thenReturn('batman');
+        td.when(app._defaultPackager.packageStyles(), { ignoreExtraArgs: true }).thenReturn('batman');
+
+        app.toArray(); // doesn't throw an error
+      });
+    });
+
     describe('toTree', function() {
       beforeEach(function() {
         addon = {
@@ -897,14 +980,18 @@ describe('EmberApp', function() {
 
         app = new EmberApp({
           project,
+          tests: true,
+          trees: { tests: {} },
         });
       });
 
       it('calls postProcessTree if defined', function() {
         app.toArray = td.function();
+        app._legacyPackage = td.function();
 
+        td.when(app._legacyPackage(), { ignoreExtraArgs: true }).thenReturn('bar');
         td.when(app.toArray(), { ignoreExtraArgs: true }).thenReturn([]);
-        td.when(addon.postprocessTree(), { ignoreExtraArgs: true }).thenReturn('derp');
+        td.when(addon.postprocessTree('all', 'bar')).thenReturn('derp');
 
         expect(app.toTree()).to.equal('derp');
       });
@@ -912,9 +999,11 @@ describe('EmberApp', function() {
       it('calls addonPostprocessTree', function() {
         app.toArray = td.function();
         app.addonPostprocessTree = td.function();
+        app._legacyPackage = td.function();
 
+        td.when(app._legacyPackage(), { ignoreExtraArgs: true }).thenReturn('bar');
         td.when(app.toArray(), { ignoreExtraArgs: true }).thenReturn([]);
-        td.when(app.addonPostprocessTree(), { ignoreExtraArgs: true }).thenReturn('blap');
+        td.when(app.addonPostprocessTree('all', 'bar')).thenReturn('blap');
 
         expect(app.toTree()).to.equal('blap');
       });
@@ -923,11 +1012,15 @@ describe('EmberApp', function() {
         mockTemplateRegistry(app);
 
         app.index = td.function();
+        app.getTests = td.function();
+        app._legacyAddonCompile = td.function();
         app._defaultPackager.processTemplates = td.function();
 
         td.when(app._defaultPackager.processTemplates(), { ignoreExtraArgs: true }).thenReturn('x');
         td.when(addon.postprocessTree(), { ignoreExtraArgs: true }).thenReturn('blap');
         td.when(app.index(), { ignoreExtraArgs: true }).thenReturn(null);
+        td.when(app.getTests(), { ignoreExtraArgs: true }).thenReturn(null);
+        td.when(app._legacyAddonCompile(), { ignoreExtraArgs: true }).thenReturn(null);
 
         expect(app.toTree()).to.equal('blap');
 

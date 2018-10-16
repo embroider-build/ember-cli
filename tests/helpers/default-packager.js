@@ -122,12 +122,11 @@ const DEFAULT_SOURCE = {
       'ember-cli': '~3.0.0-beta.1',
       'ember-cli-app-version': '^3.0.0',
       'ember-cli-babel': '^6.6.0',
-      'ember-cli-dependency-checker': '^2.0.0',
+      'ember-cli-dependency-checker': '^3.0.0',
       'ember-cli-eslint': '^4.2.1',
-      'ember-cli-htmlbars': '^2.0.1',
+      'ember-cli-htmlbars': '^3.0.0',
       'ember-cli-htmlbars-inline-precompile': '^1.0.0',
       'ember-cli-inject-live-reload': '^1.4.1',
-      'ember-cli-qunit': '^4.1.1',
       'ember-cli-sass': '^7.1.3',
       'ember-cli-shims': '^1.2.0',
       'ember-cli-sri': '^2.1.0',
@@ -135,6 +134,7 @@ const DEFAULT_SOURCE = {
       'ember-data': '~3.0.0-beta.1',
       'ember-export-application-global': '^2.0.0',
       'ember-load-initializers': '^1.0.0',
+      'ember-qunit': '^3.4.1',
       'ember-resolver': '^4.0.0',
       'ember-source': '~3.0.0-beta.1',
       'loader.js': '^4.2.3',
@@ -208,7 +208,7 @@ function validateDefaultPackagedDist(name, obj) {
       'vendor.map',
     ];
 
-    assert.deepEqual(result, valid, `Expected [${valid}] but got [${result}]`);
+    assert.deepStrictEqual(result, valid, `Expected [${valid}] but got [${result}]`);
   } else {
     throw new Error('Validation Error: Packaged files must be nested under `assets` folder');
   }

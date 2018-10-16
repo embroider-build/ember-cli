@@ -11,9 +11,9 @@ the release gotchas and will hopefully result in a successful release.
 ### Communication
 
 - Ensure that homu isn't presently processing any PRs.
-- Post a note in [#dev-ember-cli](https://embercommunity.slack.com/archives/dev-ember-cli) letting us know you're doing a release.
+- Post a note in [#dev-ember-cli](https://discordapp.com/channels/480462759797063690/480501885837770763) letting us know you're doing a release.
 
-> I'm starting an Ember CLI release. Please hold off merging PRs, "homu r+"-ing, and pushing new code!
+> I'm starting an Ember CLI release. Please hold off merging PRs and pushing new code!
 
 ### Environment
 
@@ -23,7 +23,6 @@ Make sure that you're running the most recent stable `node` and bundled `npm`.
 node --version
 npm --version
 ```
-
 
 ## Branching
 
@@ -56,7 +55,6 @@ git checkout -B beta --track origin/beta
 # Merge the new stable release into the "beta" branch
 git merge vX.Y.0
 ```
-
 
 ### Stable bugfix release
 
@@ -117,13 +115,17 @@ git checkout -B master --track origin/master
 git merge vX.Y.0-beta.N
 ```
 
-
 ## Release
 
 ### Setup
 
 * Update Ember and Ember Data versions.
   * `blueprints/app/files/package.json`
+  * if you're releasing a new minor or major version:
+    * `tests/fixtures/addon/npm/package.json`
+    * `tests/fixtures/addon/yarn/package.json`
+    * `tests/fixtures/app/npm/package.json`
+    * `tests/fixtures/app/yarn/package.json`
 * generate changelog
   * if on master branch
     * run `./dev/changelog`
@@ -222,10 +224,29 @@ Announce release!
   * enter the new version number as the tag prefixed with `v` e.g. (`v0.1.12`)
   * Make sure to include the links for diffs between the versions.
   * for release title choose a great name, no pressure
-  * in the description paste the upgrade instructions from the previous release,
-    followed by the new CHANGELOG. entry
-  * attach the `ember-cli-<version>.tgz` from above
-  * Check Pre-release for beta releases.
+  * in the description paste the following upgrade instructions
+
+```
+## Setup
+
+`npm install -g ember-cli@NEW_VERSION_NUMBER` -- Install new global ember-cli
+
+## Project Update
+
+1. `rm -rf node_modules dist tmp` -- Delete temporary development folders.
+2. `npm install -g ember-cli-update` -- Install Ember CLI update tool globally.
+3. Run `ember-cli-update` -- This will update your app or addon to the latest ember-cli release. You will probably encounter merge conflicts that you should resolve in your normal git workflow.
+4. Run `ember-cli-update --run-codemods` -- This will let you pick codemods to run against your project, to ensure you are using the latest patterns and platform features.
+
+## Changelog
+
+INSERT_CHANGELOG_HERE
+```
+
+  * Fill in the version number for `NEW_VERSION_NUMBER`
+  * Replace `INSERT_CHANGELOG_HERE` with the new content from `CHANGELOG.md`
+  * Attach the `ember-cli-<version>.tgz` from above
+  * Check the "Pre-release" checkbox for beta releases.
   * Publish the release.
 
 ### Twitter
@@ -234,16 +255,16 @@ Announce release!
 https://github.com/ember-cli/ember-cli/releases/tag/vX.Y.Z
 \#emberjs
 
-### Slack
+### Discord
 
 Grab a link to your tweet and post in:
-* [#-announcements](https://embercommunity.slack.com/archives/-announcements)
-* [#dev-ember-cli](https://embercommunity.slack.com/archives/dev-ember-cli)
-* [#-ember-cli](https://embercommunity.slack.com/archives/-ember-cli)
+* [#news-and-announcements](https://discordapp.com/channels/480462759797063690/480499624663056390)
+* [#dev-ember-cli](https://discordapp.com/channels/480462759797063690/480501885837770763)
+* [#ember-cli](https://discordapp.com/channels/480462759797063690/486548111221719040)
 
 
 ## Troubleshooting
 
 * if a few mins after release you notice an issue, you can unpublish
-  * `npm unpublish ember-cli@<version>`
+  * `npm unpublish ember-cli@<version>` (`npm unpublish` is write-only, that is you can unpublish but cannot push `ember-cli` with the same version, you have to bump `version` in `package.json`)
 * if it is completely broken, feel free to unpublish a few hours later or the next morning, even if you don't have time to immediately rerelease

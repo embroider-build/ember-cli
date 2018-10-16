@@ -18,19 +18,26 @@ let file = chai.file;
 let dir = chai.dir;
 const forEach = require('ember-cli-lodash-subset').forEach;
 const assertVersionLock = require('../helpers/assert-version-lock');
-const experiments = require('../../lib/experiments');
+const { isExperimentEnabled } = require('../../lib/experiments');
 
 let tmpDir = './tmp/new-test';
 
 describe('Acceptance: ember new', function() {
   this.timeout(10000);
+  let ORIGINAL_PROCESS_ENV_CI;
 
   beforeEach(co.wrap(function *() {
     yield tmp.setup(tmpDir);
     process.chdir(tmpDir);
+    ORIGINAL_PROCESS_ENV_CI = process.env.CI;
   }));
 
   afterEach(function() {
+    if (ORIGINAL_PROCESS_ENV_CI === undefined) {
+      delete process.env.CI;
+    } else {
+      process.env.CI = ORIGINAL_PROCESS_ENV_CI;
+    }
     return tmp.teardown(tmpDir);
   });
 
@@ -52,13 +59,13 @@ describe('Acceptance: ember new', function() {
   }
 
   function confirmBlueprintedApp() {
-    if (experiments.MODULE_UNIFICATION) {
+    if (isExperimentEnabled('MODULE_UNIFICATION')) {
       return confirmBlueprintedForDir('blueprints/module-unification-app');
     }
     return confirmBlueprintedForDir('blueprints/app');
   }
 
-  if (experiments.MODULE_UNIFICATION) {
+  if (isExperimentEnabled('MODULE_UNIFICATION')) {
     it('EMBER_CLI_MODULE_UNIFICATION: ember addon foo works', co.wrap(function *() {
       yield ember([
         'addon',
@@ -121,6 +128,20 @@ describe('Acceptance: ember new', function() {
     ]);
 
     confirmBlueprintedApp();
+  }));
+
+  it('ember new foo, blueprint targets match the default ember-cli targets', co.wrap(function *() {
+    yield ember([
+      'new',
+      'foo',
+      '--skip-npm',
+      '--skip-bower',
+    ]);
+
+    process.env.CI = true;
+    const defaultTargets = require('../../lib/utilities/default-targets').browsers;
+    const blueprintTargets = require(path.resolve('config/targets.js')).browsers;
+    expect(blueprintTargets).to.have.same.deep.members(defaultTargets);
   }));
 
   it('ember new with empty app name fails with a warning', co.wrap(function *() {
@@ -453,7 +474,7 @@ describe('Acceptance: ember new', function() {
       checkPackageJson(fixturePath);
     }));
 
-    if (!experiments.MODULE_UNIFICATION) {
+    if (!isExperimentEnabled('MODULE_UNIFICATION')) {
       it('app + npm + !welcome', co.wrap(function *() {
         yield ember([
           'new',

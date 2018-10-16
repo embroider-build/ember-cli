@@ -3,7 +3,7 @@
 const co = require('co');
 const expect = require('chai').expect;
 const Funnel = require('broccoli-funnel');
-const experiments = require('../../../../lib/experiments');
+const { isExperimentEnabled } = require('../../../../lib/experiments');
 const DefaultPackager = require('../../../../lib/broccoli/default-packager');
 const broccoliTestHelper = require('broccoli-test-helper');
 const defaultPackagerHelpers = require('../../../helpers/default-packager');
@@ -26,6 +26,12 @@ describe('Default Packager: Styles', function() {
   };
   let MODULES = {
     'addon-tree-output': { },
+    app: {
+      styles: {
+        'app.css': '@import "extra.css";\nhtml { height: 100%; }',
+        'extra.css': 'body{ position: relative; }',
+      },
+    },
     'the-best-app-ever': {
       'router.js': 'router.js',
       'app.js': 'app.js',
@@ -37,10 +43,6 @@ describe('Default Packager: Styles', function() {
       },
       'config': {
         'environment.js': 'environment.js',
-      },
-      styles: {
-        'app.css': '@import "extra.css";\nhtml { height: 100%; }',
-        'extra.css': 'body{ position: relative; }',
       },
       'templates': {},
     },
@@ -389,7 +391,7 @@ describe('Default Packager: Styles', function() {
     expect(outputFiles.assets['vendor.css']).to.equal('first\nsecond\nthird');
   }));
 
-  if (experiments.MODULE_UNIFICATION) {
+  if (isExperimentEnabled('MODULE_UNIFICATION')) {
     describe('with module unification layout', function() {
       let importFilesMap = {
         '/assets/vendor.css': [
